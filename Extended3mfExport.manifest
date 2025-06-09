@@ -1,0 +1,13 @@
+{
+	"autodeskProduct":	"Fusion",
+	"type":	"addin",
+	"author":	"Luise Hartdegen",
+	"description":	{
+		"":	"The add-in allows users to add print hints to their model like marking a specific component as a support blocker or wall enhancer as well as marking a plane as the surface the component is supposed to be printed on and exports these hints to a 3mf file. Only works in tandem with the adapted OrcaSlicer."
+	},
+	"version":	"",
+	"runOnStartup":	false,
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true,
+	"iconFilename":	"AddInIcon.svg"
+}
