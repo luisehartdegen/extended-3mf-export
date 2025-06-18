@@ -75,7 +75,8 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     # TODO Define the dialog for your command by adding different inputs to the command.
 
     # Create a selection input that allows exactly one body to be selected
-    inputs.addSelectionInput('body_selection_input', 'Please select body', 'Select body to be marked as modifier')
+    selection = inputs.addSelectionInput('body_selection_input', 'Please select body', 'Select body to be marked as modifier')
+    selection.addSelectionFilter("Bodies")
     
 
     # Create a value input field and set the default using 1 unit of the default length unit.
@@ -101,13 +102,11 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Get a reference to your command's inputs.
     inputs = args.command.commandInputs
-    text_box: adsk.core.TextBoxCommandInput = inputs.itemById('text_box')
-    value_input: adsk.core.ValueCommandInput = inputs.itemById('value_input')
+    selection_command_input: adsk.core.SelectionCommandInput = inputs.itemById('body_selection_input')
+    
 
     # Do something interesting
-    text = text_box.text
-    expression = value_input.expression
-    msg = f'Your text: {text}<br>Your value: {expression}'
+    msg = f'Your selection: {selection_command_input} \n Of type: {selection_command_input.objectType}'
     ui.messageBox(msg)
 
 
@@ -123,6 +122,9 @@ def command_preview(args: adsk.core.CommandEventArgs):
 def command_input_changed(args: adsk.core.InputChangedEventArgs):
     changed_input = args.input
     inputs = args.inputs
+    eventArgs = adsk.core.SelectionEventArgs.cast(args)
+    activeSelectionInput = eventArgs.firingEvent.activeInput
+    # if activeSelectionInput
 
     # General logging for debug.
     futil.log(f'{CMD_NAME} Input Changed Event fired from a change to {changed_input.id}')
@@ -137,12 +139,12 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
     inputs = args.inputs
     
     # Verify the validity of the input values. This controls if the OK button is enabled or not.
-    valueInput = inputs.itemById('value_input')
-    if valueInput.value >= 0:
-        args.areInputsValid = True
-    else:
-        args.areInputsValid = False
-        
+    selectionInput = inputs.itemById('body_selection_input')
+    if selectionInput: 
+        True
+    else: 
+        False
+
 
 # This event handler is called when the command terminates.
 def command_destroy(args: adsk.core.CommandEventArgs):
