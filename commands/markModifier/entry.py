@@ -19,6 +19,13 @@ COMMAND_BESIDE_ID = 'ScriptsManagerCommand'
 
 ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', '')
 
+BODY_SELECTION_INPUT = 'body_selection_input'
+MODIFIER_TYPE_INPUT = 'modifier_type'
+
+MODIFIER_SUPPORT_BLOCKER = 'Support Blocker'
+MODIFIER_SUPPORT_ENHANCER ='Support Enhancer'
+MODIFIER_WALL_LOOPS = 'Wall Loops'
+
 # Local list of event handlers used to maintain a reference so
 # they are not released and garbage collected.
 local_handlers = []
@@ -75,14 +82,22 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     # TODO Define the dialog for your command by adding different inputs to the command.
 
     # Create a selection input that allows exactly one body to be selected
-    selection = inputs.addSelectionInput('body_selection_input', 'Please select body', 'Select body to be marked as modifier')
+    selection = inputs.addSelectionInput(BODY_SELECTION_INPUT, 'Please select body', 'Select body to be marked as modifier')
     selection.addSelectionFilter("Bodies")
     
+    # create dropdown menu to select wall loop / support blocker (default) / support enhancer
+    dropdown = inputs.addDropDownCommandInput(MODIFIER_TYPE_INPUT, 'Modifier Type', adsk.core.DropDownStyles.TextListDropDownStyle)
+    dropdown.isFullWidth = True
+    dropdown.maxVisibleItems = 3
+    dropdownItems = dropdown.listItems
+    dropdownItems.add(MODIFIER_SUPPORT_BLOCKER, True, '')
+    dropdownItems.add(MODIFIER_SUPPORT_ENHANCER, False, '')
+    dropdownItems.add(MODIFIER_WALL_LOOPS, False, '')    
 
-    # Create a value input field and set the default using 1 unit of the default length unit.
-    # defaultLengthUnits = app.activeProduct.unitsManager.defaultLengthUnits
-    # default_value = adsk.core.ValueInput.createByString('1')
-    # inputs.addValueInput('value_input', 'Some Value', defaultLengthUnits, default_value)
+    # Create a value input field to set amount of wall loops if that option is selected
+    wall_loop_input = inputs.addValueInput('wall_loops_input', 'Amount of Wall Loops', '', adsk.core.ValueInput.createByString('2'))
+    wall_loop_input.isVisible = False
+    wall_loop_input.minimumValue = 1
 
     # TODO Connect to the events that are needed by this command.
     futil.add_handler(args.command.execute, command_execute, local_handlers=local_handlers)
@@ -102,9 +117,10 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Get a reference to your command's inputs.
     inputs = args.command.commandInputs
-    selection_command_input: adsk.core.SelectionCommandInput = inputs.itemById('body_selection_input')
+    selection_command_input: adsk.core.SelectionCommandInput = inputs.itemById(BODY_SELECTION_INPUT)
+    dropdown_command_input: adsk.core.DropDownCommandInput = inputs.itemById(MODIFIER_TYPE_INPUT)
+    selected_modifier = dropdown_command_input.selectedItem.name
     
-
     # Do something interesting
     msg = f'Your selection: {selection_command_input} \n Of type: {selection_command_input.objectType}'
     ui.messageBox(msg)
@@ -121,13 +137,15 @@ def command_preview(args: adsk.core.CommandEventArgs):
 # allowing you to modify values of other inputs based on that change.
 def command_input_changed(args: adsk.core.InputChangedEventArgs):
     changed_input = args.input
-    inputs = args.inputs
-    eventArgs = adsk.core.SelectionEventArgs.cast(args)
-    activeSelectionInput = eventArgs.firingEvent.activeInput
-    # if activeSelectionInput
 
     # General logging for debug.
     futil.log(f'{CMD_NAME} Input Changed Event fired from a change to {changed_input.id}')
+
+    if changed_input.id == MODIFIER_TYPE_INPUT:
+        if adsk.core.DropDownCommandInput.cast(changed_input).selectedItem.name == MODIFIER_WALL_LOOPS:
+            args.inputs.itemById('wall_loops_input').isVisible = True
+        else:
+            args.inputs.itemById('wall_loops_input').isVisible = False
 
 
 # This event handler is called when the user interacts with any of the inputs in the dialog
@@ -140,7 +158,9 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
     
     # Verify the validity of the input values. This controls if the OK button is enabled or not.
     selectionInput = inputs.itemById('body_selection_input')
-    if selectionInput: 
+    dropdownInput = inputs.itemById('modifier_type')
+
+    if selectionInput and dropdownInput.selectedItem: 
         True
     else: 
         False
