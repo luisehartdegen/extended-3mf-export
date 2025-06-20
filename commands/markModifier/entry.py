@@ -1,7 +1,11 @@
 import adsk.core
 import os
+
+import adsk.fusion
 from ...lib import fusionAddInUtils as futil
 from ... import config
+
+import traceback
 
 app = adsk.core.Application.get()
 ui = app.userInterface
@@ -17,10 +21,11 @@ WORKSPACE_ID = 'FusionSolidEnvironment'
 PANEL_ID = 'SolidScriptsAddinsPanel'
 COMMAND_BESIDE_ID = 'ScriptsManagerCommand'
 
-ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', '')
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 BODY_SELECTION_INPUT = 'body_selection_input'
 MODIFIER_TYPE_INPUT = 'modifier_type'
+WALL_LOOPS_INPUT = 'wall_loops_input'
 
 MODIFIER_SUPPORT_BLOCKER = 'Support Blocker'
 MODIFIER_SUPPORT_ENHANCER ='Support Enhancer'
@@ -34,7 +39,7 @@ local_handlers = []
 # Executed when add-in is run.
 def start():
     # Create a command Definition.
-    cmd_def = ui.commandDefinitions.addButtonDefinition(CMD_ID, CMD_NAME, CMD_Description, ICON_FOLDER)
+    cmd_def = ui.commandDefinitions.addButtonDefinition(CMD_ID, CMD_NAME, CMD_Description, os.path.join(SCRIPT_DIR, 'resources', ''))
 
     # Define an event handler for the command created event. It will be called when the button is clicked.
     futil.add_handler(cmd_def.commandCreated, command_created)
@@ -95,7 +100,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     dropdownItems.add(MODIFIER_WALL_LOOPS, False, '')    
 
     # Create a value input field to set amount of wall loops if that option is selected
-    wall_loop_input = inputs.addValueInput('wall_loops_input', 'Amount of Wall Loops', '', adsk.core.ValueInput.createByString('2'))
+    wall_loop_input = inputs.addValueInput(WALL_LOOPS_INPUT, 'Amount of Wall Loops', '', adsk.core.ValueInput.createByString('2'))
     wall_loop_input.isVisible = False
     wall_loop_input.minimumValue = 1
 
@@ -117,14 +122,50 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Get a reference to your command's inputs.
     inputs = args.command.commandInputs
-    selection_command_input: adsk.core.SelectionCommandInput = inputs.itemById(BODY_SELECTION_INPUT)
-    dropdown_command_input: adsk.core.DropDownCommandInput = inputs.itemById(MODIFIER_TYPE_INPUT)
-    selected_modifier = dropdown_command_input.selectedItem.name
-    
-    # Do something interesting
-    msg = f'Your selection: {selection_command_input} \n Of type: {selection_command_input.objectType}'
-    ui.messageBox(msg)
 
+    try:
+        selection_command_input: adsk.core.SelectionCommandInput = inputs.itemById(BODY_SELECTION_INPUT)
+        dropdown_command_input: adsk.core.DropDownCommandInput = inputs.itemById(MODIFIER_TYPE_INPUT)
+        selected_modifier = dropdown_command_input.selectedItem.name
+
+        active_selection: adsk.fusion.BRepBody = selection_command_input.selection(0).entity
+
+        design:adsk.fusion.Design = adsk.fusion.Design.cast(app.activeProduct)
+
+        rootComp = design.rootComponent
+        features = rootComp.features
+
+        materialLibs = app.materialLibraries
+
+        matLib = None
+        for i in range(materialLibs.count):
+            lib = materialLibs.item(i)
+            if lib.name == 'Extended3mfExport':
+                matLib = lib
+                break
+
+        # Load only if not already loaded
+        if not matLib:
+            matLib = materialLibs.load(os.path.join(SCRIPT_DIR, 'resources', 'Extended3mfExport.adsklib'))
+
+        if selected_modifier == MODIFIER_SUPPORT_BLOCKER:
+            appear_lib = matLib.appearances.item(0)
+        elif selected_modifier == MODIFIER_SUPPORT_ENHANCER:
+            appear_lib = matLib.appearances.item(1)
+        elif selected_modifier == MODIFIER_WALL_LOOPS:
+            wall_loops_input: adsk.core.ValueCommandInput = inputs.itemById(WALL_LOOPS_INPUT)
+            appear_lib = matLib.appearances.item(2)
+
+        appear_copy = get_or_add_appearance(design, appear_lib)
+        active_selection.appearance = appear_copy
+
+        # unload library 
+        if matLib.isNative == False:
+            matLib.unload()  
+
+    except:
+        if ui:
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
 def command_preview(args: adsk.core.CommandEventArgs):
@@ -143,9 +184,9 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
 
     if changed_input.id == MODIFIER_TYPE_INPUT:
         if adsk.core.DropDownCommandInput.cast(changed_input).selectedItem.name == MODIFIER_WALL_LOOPS:
-            args.inputs.itemById('wall_loops_input').isVisible = True
+            args.inputs.itemById(WALL_LOOPS_INPUT).isVisible = True
         else:
-            args.inputs.itemById('wall_loops_input').isVisible = False
+            args.inputs.itemById(WALL_LOOPS_INPUT).isVisible = False
 
 
 # This event handler is called when the user interacts with any of the inputs in the dialog
@@ -157,8 +198,8 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
     inputs = args.inputs
     
     # Verify the validity of the input values. This controls if the OK button is enabled or not.
-    selectionInput = inputs.itemById('body_selection_input')
-    dropdownInput = inputs.itemById('modifier_type')
+    selectionInput = inputs.itemById(BODY_SELECTION_INPUT)
+    dropdownInput = inputs.itemById(MODIFIER_TYPE_INPUT)
 
     if selectionInput and dropdownInput.selectedItem: 
         True
@@ -173,3 +214,11 @@ def command_destroy(args: adsk.core.CommandEventArgs):
 
     global local_handlers
     local_handlers = []
+
+
+def get_or_add_appearance(des: adsk.fusion.Design, lib_appearance: adsk.core.Appearance):
+    existing = des.appearances.itemByName(f"{lib_appearance.name}_Copied")
+    if existing:
+        return existing
+    else:
+        return des.appearances.addByCopy(lib_appearance, f"{lib_appearance.name}_Copied")
